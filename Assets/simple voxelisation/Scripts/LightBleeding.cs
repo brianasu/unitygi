@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using System.Collections;
 using System;
+using System.Collections.Generic;
 
 [ExecuteInEditMode]
 public class LightBleeding : MonoBehaviour 
@@ -45,23 +46,23 @@ public class LightBleeding : MonoBehaviour
 		}
 	}
 
-	private RenderTexture _albedo;
-	private RenderTexture Albedo
+	private RenderTexture _albedoTexture;
+	private RenderTexture AlbedoTexture
 	{
 		get
 		{
-			if (_albedo != null && fluxRes != _albedo.height)
+			if (_albedoTexture != null && fluxRes != _albedoTexture.height)
 			{
-				DestroySafe(_albedo);
+				DestroySafe(_albedoTexture);
 			}
-			if(_albedo == null)
+			if(_albedoTexture == null)
 			{
-				_albedo = new RenderTexture(fluxRes, fluxRes, 24, RenderTextureFormat.ARGB32);
-				_albedo.hideFlags = HideFlags.HideAndDontSave;
-				_albedo.wrapMode = TextureWrapMode.Clamp;
-				_albedo.useMipMap = false;
+				_albedoTexture = new RenderTexture(fluxRes, fluxRes, 24, RenderTextureFormat.ARGB32);
+				_albedoTexture.hideFlags = HideFlags.HideAndDontSave;
+				_albedoTexture.wrapMode = TextureWrapMode.Clamp;
+				_albedoTexture.useMipMap = false;
 			}
-			return _albedo;
+			return _albedoTexture;
 		}
 	}
 
@@ -76,11 +77,7 @@ public class LightBleeding : MonoBehaviour
 			}
 			if(_prevTexture == null)
 			{
-				_prevTexture = new RenderTexture(voxelSize * voxelSize, voxelSize, 0);
-				_prevTexture.hideFlags = HideFlags.HideAndDontSave;
-				_voxelTexture.filterMode = FilterMode.Point;
-				_prevTexture.wrapMode = TextureWrapMode.Clamp;
-				_prevTexture.useMipMap = false;
+				_prevTexture = SetupVoxelTexture();
 			}
 			return _prevTexture;
 		}
@@ -97,11 +94,7 @@ public class LightBleeding : MonoBehaviour
 			}
 			if(_voxelTexture == null)
 			{
-				_voxelTexture = new RenderTexture(voxelSize * voxelSize, voxelSize, 0);
-				_voxelTexture.hideFlags = HideFlags.HideAndDontSave;
-				_voxelTexture.filterMode = FilterMode.Point;
-				_voxelTexture.wrapMode = TextureWrapMode.Clamp;
-				_voxelTexture.useMipMap = false;
+				_voxelTexture = SetupVoxelTexture();
 			}
 			return _voxelTexture;
 		}
@@ -123,10 +116,16 @@ public class LightBleeding : MonoBehaviour
 		}
 	}
 
-	private void OnEnable()
+	private RenderTexture SetupVoxelTexture()
 	{
-		camera.depthTextureMode |= DepthTextureMode.DepthNormals;
+		var tex = new RenderTexture(voxelSize * voxelSize, voxelSize, 0);
+		tex.hideFlags = HideFlags.HideAndDontSave;
+		tex.filterMode = FilterMode.Point;
+		tex.wrapMode = TextureWrapMode.Clamp;
+		tex.useMipMap = false;
+		return tex;
 	}
+
 
 	private Vector3 SnapVector(Vector3 vec)
 	{
@@ -135,7 +134,7 @@ public class LightBleeding : MonoBehaviour
 
 	private float SnapNumber(float number)
 	{
-		var worldUnitsPerTexel =  (camera.orthographicSize * 2f) / Albedo.width;
+		var worldUnitsPerTexel =  (camera.orthographicSize * 2f) / AlbedoTexture.width;
 		number /= worldUnitsPerTexel;
 		number = Mathf.Round(number);
 		number *= worldUnitsPerTexel;
@@ -164,9 +163,23 @@ public class LightBleeding : MonoBehaviour
 		GL.End();
 		GL.PopMatrix();
 	}
-		
+	
+	private void OnEnable()
+	{
+		camera.depthTextureMode |= DepthTextureMode.DepthNormals;
+	}
+
 	private void Update()
 	{
+		voxelSize = Mathf.Clamp(voxelSize, 4, 64);
+		propogationSteps = Mathf.Clamp(propogationSteps, 1, voxelSize);
+		fluxRes = Mathf.Clamp(voxelSize, 16, 2048);
+
+		// Make sure the textures are updated
+		var tex = AlbedoTexture;
+		var tex2 = PrevTexture;
+		var tex3 = VoxelTexture;
+
 		if(multiplyColor)
 		{
 			Shader.EnableKeyword("MULTIPLY_COLOR");
@@ -182,6 +195,7 @@ public class LightBleeding : MonoBehaviour
 		{
 			Shader.EnableKeyword("ENABLE_BLEED");
 			Shader.DisableKeyword("DISABLE_BLEED");
+
 			if(pointSample)
 			{
 				Shader.EnableKeyword("VOXEL_POINT_SAMPLE");
@@ -237,11 +251,9 @@ public class LightBleeding : MonoBehaviour
 			}
 			
 			volumeBounds = bds;
-			transform.position = SnapVector(volumeBounds.center - transform.forward * 100);
+			//transform.position = SnapVector(volumeBounds.center - transform.forward * 100);
 		}
 
-		voxelSize = Mathf.Clamp(voxelSize, 4, 64);
-		propogationSteps = Mathf.Clamp(propogationSteps, 1, voxelSize);
 
 		Shader.SetGlobalVector("_LightDir",  transform.forward);
 		Shader.SetGlobalFloat("_LPVDimensions", voxelSize);
@@ -269,13 +281,13 @@ public class LightBleeding : MonoBehaviour
 		var origOrthoSize = camera.orthographicSize;
 		camera.orthographicSize = SnapNumber(camera.orthographicSize);
 
-		camera.targetTexture = Albedo;
+		camera.targetTexture = AlbedoTexture;
 		Shader.EnableKeyword("DISABLE_BLEED");
 		Shader.DisableKeyword("ENABLED_BLEED");
 		camera.Render();
 		Shader.DisableKeyword("DISABLE_BLEED");
 		Shader.EnableKeyword("ENABLED_BLEED");
-		VoxelMaterial.SetTexture("_MainTex", Albedo);
+		VoxelMaterial.SetTexture("_MainTex", AlbedoTexture);
 
 		transform.position = origPos;
 		camera.orthographicSize = origOrthoSize;
@@ -289,11 +301,11 @@ public class LightBleeding : MonoBehaviour
 		{
 			VoxelMaterial.SetFloat("_VPLMergeLimit", vplMergeLimit);
 
-			albedoHalf = GetTempPointTexture(Albedo.width / 2);
-			depthHalf = GetTempPointTexture(Albedo.width / 2);
+			albedoHalf = GetTempPointTexture(AlbedoTexture.width / 2);
+			depthHalf = GetTempPointTexture(AlbedoTexture.width / 2);
 
-			albedoQuarter = GetTempPointTexture(Albedo.width / 4);
-			depthQuarter = GetTempPointTexture(Albedo.width / 4);
+			albedoQuarter = GetTempPointTexture(AlbedoTexture.width / 4);
+			depthQuarter = GetTempPointTexture(AlbedoTexture.width / 4);
 
 			RenderMRT(new RenderBuffer [] { albedoHalf.colorBuffer, depthHalf.colorBuffer }, albedoHalf.depthBuffer);
 			RenderMRT(new RenderBuffer [] { albedoQuarter.colorBuffer, depthQuarter.colorBuffer }, albedoQuarter.depthBuffer);
@@ -394,7 +406,7 @@ public class LightBleeding : MonoBehaviour
 		if(debugTextures)
 		{
 			GUI.DrawTexture(new Rect(-VoxelTexture.width / 2, 0, VoxelTexture.width, VoxelTexture.height), VoxelTexture);
-			GUI.DrawTexture(new Rect(0, VoxelTexture.height, 128, 128), Albedo);
+			GUI.DrawTexture(new Rect(0, VoxelTexture.height, 128, 128), AlbedoTexture);
 		}
 	}
 #endif
@@ -408,6 +420,7 @@ public class LightBleeding : MonoBehaviour
 	{
 		DestroySafe(_voxelTexture);
 		DestroySafe(_prevTexture);
+		DestroySafe(_albedoTexture);
 		DestroySafe(_voxelMaterial);
 	}
 
@@ -415,6 +428,7 @@ public class LightBleeding : MonoBehaviour
 	{
 		DestroySafe(_voxelTexture);
 		DestroySafe(_prevTexture);
+		DestroySafe(_albedoTexture);
 		DestroySafe(_voxelMaterial);
 	}
 

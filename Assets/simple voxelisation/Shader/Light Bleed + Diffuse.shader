@@ -12,8 +12,6 @@
 		Tags { "RenderType"="Opaque" }
 		LOD 200
 		
-		Cull Off
-		
 		CGPROGRAM
 		#pragma multi_compile MULTIPLY_COLOR MULTIPLY_COLOR_OFF
 		#pragma multi_compile ENABLE_BLEED DISABLE_BLEED

@@ -12,8 +12,6 @@
 		Tags { "Queue"="AlphaTest" "RenderType"="Opaque" }
 		LOD 200
 		
-		Cull Off
-		
 		CGPROGRAM
 		#pragma multi_compile ENABLE_GI DISABLE_GI 
 		#pragma surface surf Lambert alphatest:_Cutoff
