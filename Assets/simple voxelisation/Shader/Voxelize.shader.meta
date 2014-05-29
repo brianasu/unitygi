@@ -1,0 +1,6 @@
+fileFormatVersion: 2
+guid: 3a1386bb7adf34ed0b8445108deec6a3
+ShaderImporter:
+  defaultTextures:
+  - _RandomVecTex: {fileID: 2800000, guid: a181ca8e3c62f3e4b8f183f6c586b032, type: 3}
+  userData: 
