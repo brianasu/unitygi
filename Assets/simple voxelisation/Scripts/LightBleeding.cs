@@ -24,13 +24,7 @@ public class LightBleeding : MonoBehaviour
 	public bool downSampleRSM = false;
 	public bool debugTextures = false;
 	public bool multiplyColor = false;
-
-	[HideInInspector]
-	public bool hemisphericalBlur = false;
-
 	public bool pointSample = false;
-
-	public Camera targetCamera;
 
 	private Material _voxelMaterial;
 	private Material VoxelMaterial
@@ -194,58 +188,16 @@ public class LightBleeding : MonoBehaviour
 		return inverseViewMatrix.inverse;
 	}
 
-	[SerializeField]
-	[Range(0, 1)]
-	private float timeOfDay = 0;
-
 	private void OnDrawGizmos()
 	{
 		Gizmos.DrawWireCube(volumeBounds.center, volumeBounds.size);
-		if(targetCamera != null)
-		{
-			Gizmos.color = Color.blue;
-			var sceneCamera = targetCamera;
-			var points = RecalculateFrustrumPoints(sceneCamera);
-			var bd = new Bounds(sceneCamera.transform.position, Vector3.zero);
-			var mat = sceneCamera.transform.localToWorldMatrix;
-			for(int i = 0; i < points.Length; i++)
-			{
-				bd.Encapsulate(mat.MultiplyPoint(points[i]));
-				Gizmos.DrawWireSphere(mat.MultiplyPoint(points[i]), 0.2f);
-			}
-			var sphereRadius = (bd.max - bd.center).magnitude;
-			var worldUnitsPerTexel = sphereRadius / AlbedoTexture.width * 2;
-			var sphereDistance = (bd.center - sceneCamera.transform.position).magnitude;
-			
-			Gizmos.color = Color.gray;
-			Gizmos.DrawWireCube(bd.center, bd.size);
-			
-			var center = sceneCamera.transform.position + sceneCamera.transform.forward * sphereDistance;
-			center /= worldUnitsPerTexel;
-			center.x = (float)Mathf.Floor(center.x);
-			center.y = (float)Mathf.Floor(center.y);
-			center.z = (float)Mathf.Floor(center.z);
-			center *= worldUnitsPerTexel;
-			
-			Gizmos.color = Color.red;
-			Gizmos.DrawWireSphere(center, 0.5f);
-			Gizmos.DrawWireSphere(center, sphereRadius);
-			
-			Gizmos.color = Color.yellow;
-			Gizmos.DrawWireSphere(transform.position, 0.5f);
-		}
 	}
 
-	private void Update()
+	private void LateUpdate()
 	{
 		voxelSize = Mathf.Clamp(voxelSize, 4, 64);
 		propogationSteps = Mathf.Clamp(propogationSteps, 0, voxelSize);
 		fluxRes = Mathf.Clamp(fluxRes, 16, 2048);
-
-		// Make sure the textures are updated
-		var tex = AlbedoTexture;
-		var tex2 = PrevTexture;
-		var tex3 = VoxelTexture;
 
 		if(multiplyColor)
 		{
@@ -292,47 +244,6 @@ public class LightBleeding : MonoBehaviour
 			Shader.EnableKeyword("PERSPECTIVE");
 		}
 
-		if(targetCamera != null)
-		{
-			var sceneCamera = targetCamera;
-			var points = RecalculateFrustrumPoints(sceneCamera);
-			var bd = new Bounds(sceneCamera.transform.position, Vector3.zero);
-			for(int i = 0; i < points.Length; i++)
-			{
-				bd.Encapsulate(sceneCamera.transform.TransformPoint(points[i]));
-			}
-			var radius = (bd.max - bd.center).magnitude;
-			var worldUnitsPerTexel = radius / AlbedoTexture.width * 2;
-			var sphereDistance = (bd.center - sceneCamera.transform.position).magnitude;
-			
-			var center = sceneCamera.transform.position + sceneCamera.transform.forward * sphereDistance;
-			center /= worldUnitsPerTexel;
-			center.x = (float)Mathf.Floor(center.x);
-			center.y = (float)Mathf.Floor(center.y);
-			center.z = (float)Mathf.Floor(center.z);
-			center *= worldUnitsPerTexel;
-
-			var lightDir = Vector3.Slerp(new Vector3(1, -1, -1), new Vector3(-1, -1, -1), timeOfDay);
-
-			Vector3 lightPosition = center - Vector3.Normalize(lightDir) * radius;
-			lightPosition /= worldUnitsPerTexel;
-			lightPosition.x = (float)Math.Floor(lightPosition.x);
-			lightPosition.y = (float)Math.Floor(lightPosition.y);
-			lightPosition.z = (float)Math.Floor(lightPosition.z);
-			lightPosition *= worldUnitsPerTexel;
-
-			var lightWorldToCamera = LookAt(transform.position, center, transform.up);
-			var lightProjection = Matrix4x4.Ortho(-radius, radius, -radius, radius, 0.0f, radius * 6);
-
-			volumeBounds.center = center;
-			volumeBounds.size = Vector3.one * radius * 2;
-
-			camera.ResetProjectionMatrix();
-			camera.ResetWorldToCameraMatrix();
-			camera.worldToCameraMatrix = lightWorldToCamera;
-			camera.projectionMatrix = lightProjection;
-		}
-
 		var lpoints = RecalculateFrustrumPoints(camera);
 		
 		Shader.SetGlobalVector("_LightDir",  transform.forward);
@@ -341,8 +252,8 @@ public class LightBleeding : MonoBehaviour
 		Shader.SetGlobalVector("_LPV_AABBMin", volumeBounds.min);
 		Shader.SetGlobalVector("_LPV_AABBMax", volumeBounds.max);
 		Shader.SetGlobalVector("_LPV_Extents", volumeBounds.max - volumeBounds.min);
-		Shader.SetGlobalTexture("_VoxelTex", VoxelTexture);
-
+		Shader.SetGlobalTexture("_VoxelTex", _voxelTexture);
+		
 		VoxelMaterial.SetFloat("_LightCameraNear", camera.nearClipPlane);
 		VoxelMaterial.SetFloat("_LightCameraFar", camera.farClipPlane);
 		VoxelMaterial.SetFloat("_NormalOffset", normalOffset);
@@ -398,51 +309,21 @@ public class LightBleeding : MonoBehaviour
 		Shader.DisableKeyword("SAMPLE_NORMAL");
 
 		RenderTexture.active = VoxelTexture;
-		GL.Clear(false, true, Color.clear);
+		GL.Clear(false, true, Color.black);
 		RenderVolume(VoxelMaterial, 0, voxelSize);
+		RenderTexture.active = null;
 
-		RenderTexture normalTex = null;
-		if(hemisphericalBlur)
-		{
-			Shader.DisableKeyword("SAMPLE_COLOR");
-			Shader.EnableKeyword("SAMPLE_NORMAL");
-			normalTex = RenderTexture.GetTemporary(voxelSize * voxelSize, voxelSize, 0);
-			RenderTexture.active = normalTex;
-			GL.Clear(false, true, Color.clear);
-			RenderVolume(VoxelMaterial, 0, voxelSize);
-			VoxelMaterial.SetTexture("_NormalTex", normalTex);
-		}
-
-		// Propogate or spatial blur
 		var blurBuffer = RenderTexture.GetTemporary(voxelSize * voxelSize, voxelSize, 0);
-		if(hemisphericalBlur)
+		for(int k = 0; k < propogationSteps; k++)
 		{
-			for(int k = 0; k < propogationSteps; k++)
-			{
-				Graphics.Blit(VoxelTexture, blurBuffer, VoxelMaterial, 7);
-				VoxelTexture.DiscardContents();
-				Graphics.Blit(blurBuffer, VoxelTexture, VoxelMaterial, 7);
-				blurBuffer.DiscardContents();
-				Graphics.Blit(VoxelTexture, blurBuffer, VoxelMaterial, 7);
-				VoxelTexture.DiscardContents();
-				Graphics.Blit(blurBuffer, VoxelTexture);
-				blurBuffer.DiscardContents();
-			}
-			RenderTexture.ReleaseTemporary(normalTex);
-		}
-		else
-		{
-			for(int k = 0; k < propogationSteps; k++)
-			{
-				Graphics.Blit(VoxelTexture, blurBuffer, VoxelMaterial, 1);
-				VoxelTexture.DiscardContents();
-				Graphics.Blit(blurBuffer, VoxelTexture, VoxelMaterial, 2);
-				blurBuffer.DiscardContents();
-				Graphics.Blit(VoxelTexture, blurBuffer, VoxelMaterial, 3);
-				VoxelTexture.DiscardContents();
-				Graphics.Blit(blurBuffer, VoxelTexture);
-				blurBuffer.DiscardContents();
-			}
+			Graphics.Blit(VoxelTexture, blurBuffer, VoxelMaterial, 1);
+			VoxelTexture.DiscardContents();
+			Graphics.Blit(blurBuffer, VoxelTexture, VoxelMaterial, 2);
+			blurBuffer.DiscardContents();
+			Graphics.Blit(VoxelTexture, blurBuffer, VoxelMaterial, 3);
+			VoxelTexture.DiscardContents();
+			Graphics.Blit(blurBuffer, VoxelTexture);
+			blurBuffer.DiscardContents();
 		}
 		RenderTexture.ReleaseTemporary(blurBuffer);
 
@@ -478,8 +359,7 @@ public class LightBleeding : MonoBehaviour
 		if(debugTextures)
 		{
 			GUI.DrawTexture(new Rect(-2 * VoxelTexture.width / 2, 2 * voxelSize * 0, 2 * VoxelTexture.width, 2 * VoxelTexture.height), VoxelTexture);
-			GUI.DrawTexture(new Rect(-2 * VoxelTexture.width / 2, 2 * voxelSize * 1, 2 * VoxelTexture.width, 2 * VoxelTexture.height), VoxelDebugTexture);
-			GUI.DrawTexture(new Rect(0, 2 * voxelSize * 2, 256, 256), AlbedoTexture);
+			GUI.DrawTexture(new Rect(0, 2 * voxelSize, 256, 256), AlbedoTexture);
 		}
 	}
 #endif

@@ -363,6 +363,7 @@ Subshader
 	{
 		ZTest Always Cull Off ZWrite Off
 		Fog { Mode off }
+		ColorMask RGB
 		CGPROGRAM
 		#pragma vertex vertBlur
 		#pragma fragment fragSpatialBlur
@@ -373,6 +374,7 @@ Subshader
 	{
 		ZTest Always Cull Off ZWrite Off
 		Fog { Mode off }
+		ColorMask RGB
 		CGPROGRAM
 		#pragma vertex vertBlur
 		#pragma fragment fragSpatialBlur
@@ -383,6 +385,7 @@ Subshader
 	{
 		ZTest Always Cull Off ZWrite Off
 		Fog { Mode off }
+		ColorMask RGB
 		CGPROGRAM
 		#pragma vertex vertBlur
 		#pragma fragment fragSpatialBlur

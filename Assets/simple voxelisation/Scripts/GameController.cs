@@ -68,7 +68,7 @@ public class GameController : MonoBehaviour {
 			{
 				spawnPos += Vector3.up * 2;
 			}
-			var bulletInst = GameObject.Instantiate(bulletPrefab, spawnPos, Quaternion.identity) as Bullet;
+			GameObject.Instantiate(bulletPrefab, spawnPos, Quaternion.identity);
 		}
 	}
 
