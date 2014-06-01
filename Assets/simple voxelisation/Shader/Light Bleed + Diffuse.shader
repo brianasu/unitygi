@@ -2,7 +2,7 @@
 {
 	Properties 
 	{
-		_MainTex ("Base (RGB)", 2D) = "gray" {}
+		_MainTex ("Base (RGB)", 2D) = "white" {}
 		_BumpTex ("Normal (RGB)", 2D) = "bump" {}
 		_Color ("Color", COLOR) = (1, 1, 1, 1)
 	}

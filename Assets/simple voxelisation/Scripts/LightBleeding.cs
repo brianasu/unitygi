@@ -118,7 +118,7 @@ public class LightBleeding : MonoBehaviour
 		{
 			if(Application.isPlaying)
 			{
-				Destroy(obj);
+				Destroy(obj, 0.1f);
 			}
 			else
 			{
@@ -358,7 +358,7 @@ public class LightBleeding : MonoBehaviour
 	{
 		if(debugTextures)
 		{
-			GUI.DrawTexture(new Rect(-2 * VoxelTexture.width / 2, 2 * voxelSize * 0, 2 * VoxelTexture.width, 2 * VoxelTexture.height), VoxelTexture);
+			GUI.DrawTexture(new Rect(-2 * VoxelTexture.width / 2, 2 * voxelSize * 0, 2 * VoxelTexture.width, 2 * VoxelTexture.height), VoxelTexture, ScaleMode.ScaleToFit, false);
 			GUI.DrawTexture(new Rect(0, 2 * voxelSize, 256, 256), AlbedoTexture);
 		}
 	}
