@@ -1,12 +1,13 @@
-unitygi
-=======
+## Light bleeding library for Unity
+Simple light bleeding library for unity 4.5+ that simulates global illumination. Works on mac and dx9+ windows.
 
-Simple light bleeding library for unity 4.5+
+### Shaders
+4 shaders are included in this package
 
-4 shaders included
-Diffuse + Normal
-Transparent + Normal
-Transparent Cutout + Normal
-Additive Particle
+* Diffuse + Normal
+* Transparent + Normal
+* Transparent Cutout + Normal
+* Additive Particle
 
+### Notes
 This library only does simple colour bleeding using a spatial blur. SPH are not implemented.
