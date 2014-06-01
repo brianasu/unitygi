@@ -66,6 +66,7 @@
 		
 		fixed4 Albedo = IN.color * c;
 		fixed3 Emission = gi;
+		
 		return float4(lerp(Albedo.rgb, Albedo.rgb + Emission.rgb, _Bleed), Albedo.a * alpha);
 		return float4(lerp(Albedo.rgb, Albedo.rgb + Emission.rgb, _Bleed), Albedo.a);
 	}		
@@ -74,11 +75,12 @@
 	SubShader 
 	{
 		Tags { "RenderType"="Transparent" "Queue"="Transparent" }
+		
+		ZWrite Off
+		Blend SrcAlpha OneMinusSrcAlpha
+		
 		Pass
 		{
-			Blend SrcAlpha OneMinusSrcAlpha
-			ZWrite Off
-			
 			CGPROGRAM
 			#pragma multi_compile MULTIPLY_COLOR MULTIPLY_COLOR_OFF
 			#pragma multi_compile ENABLE_BLEED DISABLE_BLEED
@@ -87,6 +89,7 @@
 			#pragma fragment surf
 			#pragma target 3.0
 			ENDCG
-		}
+		}    
+	
 	}	
 }

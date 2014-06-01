@@ -99,8 +99,6 @@ inline float4 getSample(sampler2D volTex, float4 extents, float4 bmin, float4 bm
 
 	float3 cellf = CalcCellPos(extents, bmin, bmax, worldPos, dimensions);
 	
-	
-	
 	int3 cell = floor(cellf);
 	
 	float xUV = (cell.x + cell.z * dimensions) / dimSquared;

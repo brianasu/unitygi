@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.Collections;
 using System;
 using System.Collections.Generic;
@@ -60,6 +60,7 @@ public class LightBleeding : MonoBehaviour
 				_albedoTexture = new RenderTexture(fluxRes, fluxRes, 24, RenderTextureFormat.ARGB32);
 				_albedoTexture.hideFlags = HideFlags.HideAndDontSave;
 				_albedoTexture.wrapMode = TextureWrapMode.Clamp;
+				_albedoTexture.filterMode = FilterMode.Point;
 				_albedoTexture.useMipMap = false;
 			}
 			return _albedoTexture;
@@ -100,6 +101,23 @@ public class LightBleeding : MonoBehaviour
 		}
 	}
 
+	private RenderTexture _voxelDebugTexture;
+	private RenderTexture VoxelDebugTexture
+	{
+		get
+		{
+			if (_voxelDebugTexture != null && voxelSize != _voxelDebugTexture.height)
+			{
+				DestroySafe(_voxelDebugTexture);
+			}
+			if(_voxelDebugTexture == null)
+			{
+				_voxelDebugTexture = SetupVoxelTexture();
+			}
+			return _voxelDebugTexture;
+		}
+	}
+
 	private void DestroySafe(UnityEngine.Object obj)
 	{
 		if(obj != null)
@@ -126,15 +144,9 @@ public class LightBleeding : MonoBehaviour
 		return tex;
 	}
 
-
-	private Vector3 SnapVector(Vector3 vec)
+	private float SnapNumber(float number, float scale)
 	{
-		return new Vector3(SnapNumber(vec.x), SnapNumber(vec.y), SnapNumber(vec.z));
-	}
-
-	private float SnapNumber(float number)
-	{
-		var worldUnitsPerTexel =  (camera.orthographicSize * 2f) / AlbedoTexture.width;
+		var worldUnitsPerTexel = scale / AlbedoTexture.width;
 		number /= worldUnitsPerTexel;
 		number = Mathf.Round(number);
 		number *= worldUnitsPerTexel;
@@ -169,11 +181,66 @@ public class LightBleeding : MonoBehaviour
 		camera.depthTextureMode |= DepthTextureMode.DepthNormals;
 	}
 
+	private Matrix4x4 LookAt(Vector3 eye, Vector3 target, Vector3 up) 
+	{
+		var vz = Vector3.Normalize(eye - target);
+		var vx = -Vector3.Normalize(Vector3.Cross(up, vz));
+		var vy = -Vector3.Cross(vz, vx);
+		var inverseViewMatrix = new Matrix4x4();
+		inverseViewMatrix.SetColumn(0, new Vector4(vx.x, vx.y, vx.z, 0));
+		inverseViewMatrix.SetColumn(1, new Vector4(vy.x, vy.y, vy.z, 0));
+		inverseViewMatrix.SetColumn(2, new Vector4(vz.x, vz.y, vz.z, 0));
+		inverseViewMatrix.SetColumn(3, new Vector4(eye.x, eye.y, eye.z, 1));
+		return inverseViewMatrix.inverse;
+	}
+
+	[SerializeField]
+	[Range(0, 1)]
+	private float timeOfDay = 0;
+
+	private void OnDrawGizmos()
+	{
+		Gizmos.DrawWireCube(volumeBounds.center, volumeBounds.size);
+		if(targetCamera != null)
+		{
+			Gizmos.color = Color.blue;
+			var sceneCamera = targetCamera;
+			var points = RecalculateFrustrumPoints(sceneCamera);
+			var bd = new Bounds(sceneCamera.transform.position, Vector3.zero);
+			var mat = sceneCamera.transform.localToWorldMatrix;
+			for(int i = 0; i < points.Length; i++)
+			{
+				bd.Encapsulate(mat.MultiplyPoint(points[i]));
+				Gizmos.DrawWireSphere(mat.MultiplyPoint(points[i]), 0.2f);
+			}
+			var sphereRadius = (bd.max - bd.center).magnitude;
+			var worldUnitsPerTexel = sphereRadius / AlbedoTexture.width * 2;
+			var sphereDistance = (bd.center - sceneCamera.transform.position).magnitude;
+			
+			Gizmos.color = Color.gray;
+			Gizmos.DrawWireCube(bd.center, bd.size);
+			
+			var center = sceneCamera.transform.position + sceneCamera.transform.forward * sphereDistance;
+			center /= worldUnitsPerTexel;
+			center.x = (float)Mathf.Floor(center.x);
+			center.y = (float)Mathf.Floor(center.y);
+			center.z = (float)Mathf.Floor(center.z);
+			center *= worldUnitsPerTexel;
+			
+			Gizmos.color = Color.red;
+			Gizmos.DrawWireSphere(center, 0.5f);
+			Gizmos.DrawWireSphere(center, sphereRadius);
+			
+			Gizmos.color = Color.yellow;
+			Gizmos.DrawWireSphere(transform.position, 0.5f);
+		}
+	}
+
 	private void Update()
 	{
 		voxelSize = Mathf.Clamp(voxelSize, 4, 64);
-		propogationSteps = Mathf.Clamp(propogationSteps, 1, voxelSize);
-		fluxRes = Mathf.Clamp(voxelSize, 16, 2048);
+		propogationSteps = Mathf.Clamp(propogationSteps, 0, voxelSize);
+		fluxRes = Mathf.Clamp(fluxRes, 16, 2048);
 
 		// Make sure the textures are updated
 		var tex = AlbedoTexture;
@@ -225,36 +292,49 @@ public class LightBleeding : MonoBehaviour
 			Shader.EnableKeyword("PERSPECTIVE");
 		}
 
-		var points = RecalculateFrustrumPoints(camera);
-		for(int i = 0; i < points.Length; i++)
-		{
-			points[i] = SnapVector(points[i]);
-		}
-		
 		if(targetCamera != null)
 		{
-			var pts = RecalculateFrustrumPoints(targetCamera);
-			var centre = Vector3.zero;
-			foreach(var pt in pts)
+			var sceneCamera = targetCamera;
+			var points = RecalculateFrustrumPoints(sceneCamera);
+			var bd = new Bounds(sceneCamera.transform.position, Vector3.zero);
+			for(int i = 0; i < points.Length; i++)
 			{
-				centre += targetCamera.transform.localToWorldMatrix.MultiplyPoint(pt);
+				bd.Encapsulate(sceneCamera.transform.TransformPoint(points[i]));
 			}
-			centre /= pts.Length;
-			centre = SnapVector(centre);
+			var radius = (bd.max - bd.center).magnitude;
+			var worldUnitsPerTexel = radius / AlbedoTexture.width * 2;
+			var sphereDistance = (bd.center - sceneCamera.transform.position).magnitude;
 			
-			var bds = new Bounds(centre, Vector3.zero);
-			foreach(var pt in pts)
-			{
-				var worldPoint = targetCamera.transform.localToWorldMatrix.MultiplyPoint(pt);
-				worldPoint = SnapVector(worldPoint);
-				bds.Encapsulate(worldPoint);
-			}
-			
-			volumeBounds = bds;
-			//transform.position = SnapVector(volumeBounds.center - transform.forward * 100);
+			var center = sceneCamera.transform.position + sceneCamera.transform.forward * sphereDistance;
+			center /= worldUnitsPerTexel;
+			center.x = (float)Mathf.Floor(center.x);
+			center.y = (float)Mathf.Floor(center.y);
+			center.z = (float)Mathf.Floor(center.z);
+			center *= worldUnitsPerTexel;
+
+			var lightDir = Vector3.Slerp(new Vector3(1, -1, -1), new Vector3(-1, -1, -1), timeOfDay);
+
+			Vector3 lightPosition = center - Vector3.Normalize(lightDir) * radius;
+			lightPosition /= worldUnitsPerTexel;
+			lightPosition.x = (float)Math.Floor(lightPosition.x);
+			lightPosition.y = (float)Math.Floor(lightPosition.y);
+			lightPosition.z = (float)Math.Floor(lightPosition.z);
+			lightPosition *= worldUnitsPerTexel;
+
+			var lightWorldToCamera = LookAt(transform.position, center, transform.up);
+			var lightProjection = Matrix4x4.Ortho(-radius, radius, -radius, radius, 0.0f, radius * 6);
+
+			volumeBounds.center = center;
+			volumeBounds.size = Vector3.one * radius * 2;
+
+			camera.ResetProjectionMatrix();
+			camera.ResetWorldToCameraMatrix();
+			camera.worldToCameraMatrix = lightWorldToCamera;
+			camera.projectionMatrix = lightProjection;
 		}
 
-
+		var lpoints = RecalculateFrustrumPoints(camera);
+		
 		Shader.SetGlobalVector("_LightDir",  transform.forward);
 		Shader.SetGlobalFloat("_LPVDimensions", voxelSize);
 		Shader.SetGlobalFloat("_LPVDimensionsSquared", voxelSize * voxelSize);
@@ -262,24 +342,19 @@ public class LightBleeding : MonoBehaviour
 		Shader.SetGlobalVector("_LPV_AABBMax", volumeBounds.max);
 		Shader.SetGlobalVector("_LPV_Extents", volumeBounds.max - volumeBounds.min);
 		Shader.SetGlobalTexture("_VoxelTex", VoxelTexture);
-		
+
 		VoxelMaterial.SetFloat("_LightCameraNear", camera.nearClipPlane);
 		VoxelMaterial.SetFloat("_LightCameraFar", camera.farClipPlane);
 		VoxelMaterial.SetFloat("_NormalOffset", normalOffset);
 		VoxelMaterial.SetFloat("_FallOff", colorStrength * 3);
 		VoxelMaterial.SetFloat("_BlendSpeed", Time.renderedFrameCount == 1 ? 1 : blendSpeed);
 		VoxelMaterial.SetVector("_FrustrumPoints", new Vector4(
-			points[4].x,
-			points[5].x,
-			points[5].y,
-			points[6].y));
+			lpoints[4].x,
+			lpoints[5].x,
+			lpoints[5].y,
+			lpoints[6].y));
 		VoxelMaterial.SetMatrix("_WorldToView", camera.worldToCameraMatrix);
 		VoxelMaterial.SetMatrix("_ViewToWorld", camera.cameraToWorldMatrix);
-
-		var origPos = transform.position;
-		transform.position = SnapVector(origPos);
-		var origOrthoSize = camera.orthographicSize;
-		camera.orthographicSize = SnapNumber(camera.orthographicSize);
 
 		camera.targetTexture = AlbedoTexture;
 		Shader.EnableKeyword("DISABLE_BLEED");
@@ -288,9 +363,6 @@ public class LightBleeding : MonoBehaviour
 		Shader.DisableKeyword("DISABLE_BLEED");
 		Shader.EnableKeyword("ENABLED_BLEED");
 		VoxelMaterial.SetTexture("_MainTex", AlbedoTexture);
-
-		transform.position = origPos;
-		camera.orthographicSize = origOrthoSize;
 
 		RenderTexture depthHalf = null;
 		RenderTexture depthQuarter = null;
@@ -405,16 +477,12 @@ public class LightBleeding : MonoBehaviour
 	{
 		if(debugTextures)
 		{
-			GUI.DrawTexture(new Rect(-VoxelTexture.width / 2, 0, VoxelTexture.width, VoxelTexture.height), VoxelTexture);
-			GUI.DrawTexture(new Rect(0, VoxelTexture.height, 128, 128), AlbedoTexture);
+			GUI.DrawTexture(new Rect(-2 * VoxelTexture.width / 2, 2 * voxelSize * 0, 2 * VoxelTexture.width, 2 * VoxelTexture.height), VoxelTexture);
+			GUI.DrawTexture(new Rect(-2 * VoxelTexture.width / 2, 2 * voxelSize * 1, 2 * VoxelTexture.width, 2 * VoxelTexture.height), VoxelDebugTexture);
+			GUI.DrawTexture(new Rect(0, 2 * voxelSize * 2, 256, 256), AlbedoTexture);
 		}
 	}
 #endif
-
-	private void OnDrawGizmos()
-	{
-		Gizmos.DrawWireCube(volumeBounds.center, volumeBounds.size);
-	}
 
 	private void OnDisable()
 	{
@@ -525,7 +593,7 @@ public class LightBleeding : MonoBehaviour
 		var frustrumPoints = new Vector3[8];
 		var far = cam.farClipPlane;
 		var near = cam.nearClipPlane;
-		var aspectRatio = cam.aspect;
+		var aspectRatio = cam.pixelWidth / cam.pixelHeight;
 		
 		if(cam.isOrthoGraphic)
 		{
@@ -543,7 +611,7 @@ public class LightBleeding : MonoBehaviour
 		} 
 		else
 		{
-			var hNear = 2 * Mathf.Tan((cam.fieldOfView * 0.5f) * Mathf.Deg2Rad) * near;
+			var hNear = 2 * Mathf.Tan((cam.fieldOfView  * 0.5f) * Mathf.Deg2Rad) * near;
 			var wNear = hNear * aspectRatio;
 			
 			var hFar = 2 * Mathf.Tan((cam.fieldOfView * 0.5f) * Mathf.Deg2Rad) * far;

@@ -38,8 +38,6 @@
 			fixed4 c = tex2D (_MainTex, IN.uv_MainTex);
 			fixed3 norm = UnpackNormal(tex2D(_BumpTex, IN.uv_MainTex));
 			
-			o.Albedo = _Color.rgb * c.rgb;
-			
 			fixed4 gi = 0;
 			#ifdef ENABLE_BLEED
 			gi = SAMPLE_GI(IN.worldPos);
@@ -51,6 +49,8 @@
 			o.Emission = gi * c.rgb;
 			#endif
 			
+			o.Albedo = _Color.rgb * c.rgb;
+			o.Normal = norm;
 			o.Alpha = 1;
 		}
 		ENDCG
