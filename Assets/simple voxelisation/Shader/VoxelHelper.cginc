@@ -92,6 +92,9 @@ inline bool inside(float3 p, float3 minp, float3 maxp)
 
 inline float4 getSample(sampler2D volTex, float4 extents, float4 bmin, float4 bmax, float3 worldPos, float dimensions, float dimSquared, float2 texelSize)
 {
+	float valid = step(worldPos, bmax.xyz);
+	valid *= step(bmin.xyz, worldPos);
+	
 	float3 cellf = CalcCellPos(extents, bmin, bmax, worldPos, dimensions);
 	
 	int3 cell = floor(cellf);
@@ -100,9 +103,9 @@ inline float4 getSample(sampler2D volTex, float4 extents, float4 bmin, float4 bm
 	float yUV = cell.y / _LPVDimensions;			
 	
 	#ifdef VOXEL_POINT_SAMPLE
-	return tex2D(volTex, float2(xUV, yUV));			
+	return tex2D(volTex, float2(xUV, yUV)) * valid;			
 	#else
-	return triLerp(texelSize.xy, volTex, cell, cellf - cell, dimensions);
+	return triLerp(texelSize.xy, volTex, cell, cellf - cell, dimensions) * valid;
 	#endif
 }
 

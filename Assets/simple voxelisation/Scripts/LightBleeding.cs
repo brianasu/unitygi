@@ -21,6 +21,7 @@ public class LightBleeding : MonoBehaviour
 	public Shader depthShader;
 	public Shader voxelShader;
 	public bool on = true;
+	[HideInInspector]
 	public bool downSampleRSM = false;
 	public bool debugTextures = false;
 	public bool multiplyColor = false;

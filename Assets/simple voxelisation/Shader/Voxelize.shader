@@ -140,17 +140,10 @@ Shader "Hidden/Voxelize"
 			float3 cell = ((worldPos - _LPV_AABBMin.xyz) / dim) * _LPVDimensions; 
 			cell = floor(cell);
 			
-			if(inside(worldPos, _LPV_AABBMin.xyz, _LPV_AABBMax.xyz))
-			{
-				v.vertex.x = cell.x + cell.z * _LPVDimensions;
-				v.vertex.y = cell.y;
-				v.vertex.xy += v.texcoord.xy; 		
-			}
-			else
-			{
-				v.vertex.xyz = 100000000;
-			}	
-			
+			v.vertex.x = cell.x + cell.z * _LPVDimensions;
+			v.vertex.y = cell.y;
+			v.vertex.xy += v.texcoord.xy; 		
+	
 			#ifdef SAMPLE_COLOR
 			o.col = tex2Dlod (_MainTex, float4(uvMapping, 0, 0));
 			#else
@@ -433,20 +426,7 @@ Subshader
 		#pragma target 3.0
 		ENDCG
 	}	
-	
-	
-	Pass //7
-	{
-		ZTest Always Cull Off ZWrite Off
-		Fog { Mode off }
-		CGPROGRAM
-		#pragma vertex vertSimple
-		#pragma fragment fragDirectionalBlur
-		#pragma glsl
-		#pragma target 3.0
-		ENDCG
-	}			
-				
+					
 }
 
 Fallback off
